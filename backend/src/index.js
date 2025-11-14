@@ -77,18 +77,22 @@ class EventPlannerServer {
 
   async initialize() {
     try {
-      // Establish database connection
-      await connectDB();
-      console.log('✅ Database connection established');
-      
-      // Start HTTP server
+      // Attempt to establish database connection, but don't block server startup if it fails
+      try {
+        await connectDB();
+        console.log('✅ Database connection established');
+      } catch (dbErr) {
+        console.warn('⚠️ Database connection failed — continuing without persistence:', dbErr.message || dbErr);
+      }
+
+      // Start HTTP server regardless of DB connection
       this.application.listen(this.serverPort, () => {
         console.log(`🚀 Event Planner API running on port ${this.serverPort}`);
         console.log(`📍 Health check: http://localhost:${this.serverPort}/health`);
       });
     } catch (error) {
       console.error('❌ Server initialization failed:', error.message);
-      process.exit(1);
+      // Do not exit; surface the error but allow process to continue for development
     }
   }
 }
