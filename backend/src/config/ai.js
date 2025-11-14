@@ -51,18 +51,21 @@ function extractTextFromResponse(obj) {
   }
 
   // Filter out short tokens and metadata-like values (like model names)
+  const isModelName = (s) => /^\s*gemini[-_0-9a-z]*\s*$/i.test(s) || /^\s*model[:_\-\s0-9a-z]+$/i.test(s);
   const filtered = results
-    .filter(s => s && s.length > 40 && /\s/.test(s))
+    .filter(s => s && s.length > 15 && /\s/.test(s) && !isModelName(s))
     .sort((a, b) => b.length - a.length);
 
   if (filtered.length) return filtered[0];
 
-  // fallback: longest available string
-  const anyLong = results.sort((a, b) => b.length - a.length)[0];
+  // fallback: longest available string but skip obvious model tokens
+  const anyLong = results
+    .filter(s => s && !isModelName(s))
+    .sort((a, b) => b.length - a.length)[0];
   return anyLong || null;
 }
 
-async function runAI(prompt) {
+async function runAI(prompt, options = {}) {
   console.log('=== AI FUNCTION START ===');
   console.log('API Key available:', !!GOOGLE_AI_API_KEY);
   console.log('Prompt (trimmed):', typeof prompt === 'string' ? prompt.slice(0, 200) : prompt);
@@ -104,6 +107,9 @@ async function runAI(prompt) {
   ];
 
   // Attempt requests sequentially until we get a usable response
+  // track last attempt data for optional debug return
+  let lastAttempt = { url: null, status: null, body: null };
+
   for (const baseUrl of baseUrls) {
     const apiUrl = `${baseUrl}?key=${GOOGLE_AI_API_KEY}`;
     for (const body of payloads) {
@@ -128,6 +134,8 @@ async function runAI(prompt) {
             data = null;
           }
 
+          lastAttempt = { url: apiUrl, status: res.status, body: data };
+
           console.log('AI Response Status:', res.status);
           console.log('AI Response Body Preview:', data && typeof data === 'object' ? JSON.stringify(data).slice(0, 2000) : data);
 
@@ -148,7 +156,7 @@ async function runAI(prompt) {
           if (extracted) {
             console.log('AI Text Response (extracted):', extracted.slice(0, 1000));
             console.log('=== AI FUNCTION END ===');
-            return extracted;
+            return options.debug ? { text: extracted, debug: lastAttempt } : extracted;
           }
 
           console.warn('No text extracted from AI response, trying next payload/endpoint');
@@ -169,7 +177,7 @@ async function runAI(prompt) {
   }
 
   console.log('=== AI FUNCTION END ===');
-  return 'AI could not generate a response.';
+  return options.debug ? { text: 'AI could not generate a response.', debug: lastAttempt } : 'AI could not generate a response.';
 }
 
 module.exports = { runAI };

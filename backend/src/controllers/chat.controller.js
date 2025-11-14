@@ -13,7 +13,14 @@ async function handleChat(req, res) {
     }
 
     console.log('Calling AI with message:', message);
-    const reply = await runAI(message);
+    // Request debug info in non-production to help diagnose why fallback occurs
+    const debugMode = process.env.NODE_ENV !== 'production';
+    const aiResult = await runAI(message, { debug: debugMode });
+
+    // aiResult may be string or object { text, debug }
+    const reply = typeof aiResult === 'string' ? aiResult : (aiResult && aiResult.text) ? aiResult.text : null;
+    const aiDebug = (typeof aiResult === 'object' && aiResult.debug) ? aiResult.debug : null;
+
     console.log('AI reply received:', reply);
     console.log('AI reply type:', typeof reply);
     console.log('AI reply length:', reply ? reply.length : 'null/undefined');
@@ -53,6 +60,15 @@ async function handleChat(req, res) {
       reply,
       venues: []
     };
+
+    // Attach debug info in development so frontend can display diagnostics
+    if (aiDebug && process.env.NODE_ENV !== 'production') {
+      response.aiDebug = {
+        status: aiDebug.status,
+        url: aiDebug.url,
+        bodyPreview: typeof aiDebug.body === 'object' ? JSON.stringify(aiDebug.body).slice(0, 2000) : String(aiDebug.body)
+      };
+    }
 
     console.log('Sending response:', { conversationId: convId, replyPreview: typeof reply === 'string' ? reply.slice(0,120) : reply });
     console.log('=== CHAT REQUEST END ===');
